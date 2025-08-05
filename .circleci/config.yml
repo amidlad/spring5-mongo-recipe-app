@@ -9,35 +9,40 @@ jobs:
     working_directory: ~/repo
 
     environment:
-      MAVEN_OPTS: -Xmx3200m
+      JVM_OPTS: -Xmx3200m
       TERM: dumb
 
     steps:
       - checkout
 
-      # Restore Maven cache
+      # Restore Gradle dependencies cache
       - restore_cache:
           keys:
-            - v1-dependencies-{{ checksum "pom.xml" }}
-            - v1-dependencies-
+            - v1-gradle-cache-{{ checksum "build.gradle" }}
+            - v1-gradle-cache-
 
-      # Run Maven build with tests and JaCoCo coverage
+      # Ensure Gradle wrapper is executable
       - run:
-          name: Build & Run Tests
-          command: mvn clean verify
+          name: Make gradlew executable
+          command: chmod +x gradlew
 
-      # Save Maven dependencies to cache
+      # Build and test with coverage
+      - run:
+          name: Build & Test with JaCoCo
+          command: ./gradlew clean test jacocoTestReport
+
+      # Cache Gradle dependencies
       - save_cache:
           paths:
-            - ~/.m2
-          key: v1-dependencies-{{ checksum "pom.xml" }}
+            - ~/.gradle
+          key: v1-gradle-cache-{{ checksum "build.gradle" }}
 
-      # Save test results
+      # Collect test result files
       - run:
           name: Save JUnit Test Results
           command: |
             mkdir -p ~/junit/
-            find . -type f -regex ".*/target/surefire-reports/.*\.xml" -exec cp {} ~/junit/ \;
+            find . -type f -regex ".*/build/test-results/test/.*\.xml" -exec cp {} ~/junit/ \;
           when: always
 
       - store_test_results:
@@ -46,7 +51,7 @@ jobs:
       - store_artifacts:
           path: ~/junit
 
-      # Upload code coverage to Codecov
+      # Upload coverage report to Codecov
       - run:
           name: Upload Code Coverage to Codecov
           command: bash <(curl -s https://codecov.io/bash)
